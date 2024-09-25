@@ -94,7 +94,7 @@ def main():
     writer = SummaryWriter(f'logs/{args.model}_{args.epochs}ep_{args.learningrate}lr_{args.optimizer}_{cur_time}')
 
     trainloader,testloader,num_classes = dataloader.load_dataset(args.dataset, args.batchsize)
-    net = model.set_net(args.model, num_classes, device)
+    net = model.set_net(args.model, num_classes)
     net.to(device)
     optimizer,scheduler,criterion = set_parameter(args, net)
     

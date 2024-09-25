@@ -19,11 +19,11 @@ class MakePatch(nn.Module):
         return y
 
 class SelfAttention(nn.Module):
-    def __init__(self, D, head_numb, device):
+    def __init__(self, D, head_numb):
         super(SelfAttention,self).__init__()
         self.D = D
         self.head_numb = head_numb
-        self.make_qkv = nn.Linear(D,3*D).to(device)
+        self.make_qkv = nn.Linear(D,3*D)
     
     def forward(self, x):
         qkv = self.make_qkv(x)
@@ -37,12 +37,12 @@ class SelfAttention(nn.Module):
         return attention
 
 class MSA(nn.Module):
-    def __init__(self, D, head_numb, device):
+    def __init__(self, D, head_numb):
         super(MSA,self).__init__()
         self.D = D
         self.head_numb = head_numb
-        self.linear = nn.Linear(D*head_numb, self.D).to(device)
-        self.attention_heads = nn.ModuleList([SelfAttention(self.D, self.head_numb, device) for _ in range(self.head_numb)])
+        self.linear = nn.Linear(D*head_numb, self.D)
+        self.attention_heads = nn.ModuleList([SelfAttention(self.D, self.head_numb) for _ in range(self.head_numb)])
         
     def forward(self, x):
         results = []
@@ -53,12 +53,11 @@ class MSA(nn.Module):
         return y
 
 class Encoder(nn.Module):
-    def __init__(self, D, head_numb, mlp_size, device):
+    def __init__(self, D, head_numb, mlp_size):
         super(Encoder, self).__init__()
         self.D = D
         self.head_numb = head_numb
         self.mlp_size = mlp_size
-        self.device = device
         self.layer_norm1 = nn.LayerNorm(self.D)
         self.layer_norm2 = nn.LayerNorm(self.D)
         self.mlp = nn.Sequential(
@@ -67,10 +66,11 @@ class Encoder(nn.Module):
             nn.Linear(self.mlp_size, self.D),
             nn.GELU(),
         )
+        self.msa = MSA(self.D, self.head_numb)
         
     def forward(self, x):
         y1 = self.layer_norm1(x)
-        y1 = MSA(self.D, self.head_numb, self.device)(y1)
+        y1 = self.msa(y1)
         y1 += x
         y2 = self.layer_norm2(y1)
         y2 = self.mlp(y2)
@@ -78,25 +78,24 @@ class Encoder(nn.Module):
         return y2 + y1
 
 class VisionTransformer(nn.Module):
-    def __init__(self, model, num_classes, device):
+    def __init__(self, model, num_classes):
         super(VisionTransformer,self).__init__()
         if model == 'Base':
-            self.D = 48
+            self.D = 48 #768
             self.head_numb = 12
-            self.mlp_size = 192
-            self.layers = 8
+            self.mlp_size = 192 #3072
+            self.layers = 12 
         elif model == 'Large':
-            self.D = 256
+            self.D = 1024 
             self.head_numb = 16
-            self.mlp_size = 1024
+            self.mlp_size = 4096
             self.layers = 24
         elif model == 'Huge':
-            self.D = 320
+            self.D = 1280
             self.head_numb = 16
-            self.mlp_size = 1280
+            self.mlp_size = 5120
             self.layers = 32
         self.patch_size = 4
-        self.device = device
         self.make_patch = MakePatch(self.patch_size, self.D)
         self.mlp_head = nn.Sequential(
             nn.Linear(self.D, self.mlp_size),
@@ -105,11 +104,11 @@ class VisionTransformer(nn.Module):
             nn.GELU(),
             nn.Linear(self.D, num_classes)
             )
-        encoders = [Encoder(self.D, self.head_numb, self.mlp_size, self.device) for _ in range(self.layers)]
+        encoders = [Encoder(self.D, self.head_numb, self.mlp_size) for _ in range(self.layers)]
         self.encoder = nn.Sequential(*encoders)
-        self.class_token = nn.Parameter(torch.randn(1, 1, self.D))
+        self.class_token = nn.Parameter(torch.randn(1, 1, self.D).mul_(0.02))
         n = (32*32)//self.patch_size**2
-        self.position_embedding = nn.Parameter(torch.randn(1, n+1, self.D))
+        self.position_embedding = nn.Parameter(torch.randn(1, n+1, self.D).mul_(0.02))
         
     def forward(self, x):
         batch_size = x.shape[0]

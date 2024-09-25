@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import densenet
 import fractalnet
 import visiontransformer
+import mlpmixer
 
 class LeNet(nn.Module):
     def __init__(self, num_classes):
@@ -235,7 +236,7 @@ class PreactResNet(nn.Module):
         
         return x
 
-def set_net(model, num_classes, device):
+def set_net(model, num_classes):
     if model == 'LeNet':
         net = LeNet(num_classes)
     elif model == 'ResNet-18':
@@ -261,9 +262,15 @@ def set_net(model, num_classes, device):
     elif model == 'FractalNet-40':
         net = fractalnet.FractalNet(40, num_classes=num_classes)
     elif model == 'ViT-B':
-        net = visiontransformer.VisionTransformer('Base', num_classes, device)
+        net = visiontransformer.VisionTransformer('Base', num_classes)
     elif model == 'ViT-L':
-        net = visiontransformer.VisionTransformer('Large', num_classes, device)
+        net = visiontransformer.VisionTransformer('Large', num_classes)
     elif model == 'ViT-H':
-        net = visiontransformer.VisionTransformer('Huge', num_classes, device)
+        net = visiontransformer.VisionTransformer('Huge', num_classes)
+    elif model == 'MLPMixer-S':
+        net = mlpmixer.MLPMixer('S', 4, num_classes)
+    elif model == 'MLPMixer-B':
+        net = mlpmixer.MLPMixer('B', 4, num_classes)
+    elif model == 'MLPMixer-L':
+        net = mlpmixer.MLPMixer('L', 4, num_classes)
     return net
