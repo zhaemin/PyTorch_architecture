@@ -33,11 +33,11 @@ class FractalBlock(nn.Module):
         if self.original_columns == self.num_columns:
             if self.training:
                 if random.random() > 0.5:
-                    self.drop_local = False
+                    self.drop_local = True
                     self.drop_global = False
                 else:
                     self.drop_local = False
-                    self.drop_global = False
+                    self.drop_global = True
         
         if self.num_columns == 1:
             self.conv = ConvBlock(num_features,num_features,dropout_rate)
