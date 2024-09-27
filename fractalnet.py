@@ -21,66 +21,69 @@ class TransitionLayer(nn.Sequential):
             nn.MaxPool2d(2, 2)
         )
 
+mode = 'test'
+global_drop_column = -1
+
 class FractalBlock(nn.Module):
-    def __init__(self, original_columns, num_columns, num_features, out_features, dropout_rate, drop_local, drop_global):
+    def __init__(self, original_columns, num_columns, num_features, out_features, dropout_rate):
         super(FractalBlock,self).__init__()
         
         self.original_columns = original_columns
         self.num_columns = num_columns
-        self.drop_local = drop_local
-        self.drop_global = drop_global
+        
+        if self.num_columns == 1:
+            self.conv = ConvBlock(num_features,num_features,dropout_rate)
+        else:
+            self.conv = ConvBlock(num_features,num_features,dropout_rate)
+            self.block1 = FractalBlock(original_columns, num_columns-1, num_features, out_features, dropout_rate)
+            self.block2 = FractalBlock(original_columns, num_columns-1, num_features, out_features, dropout_rate)
+            self.transition = TransitionLayer(num_features,out_features)
+    
+    def forward(self,x):
+        global mode
+        global global_drop_column
         
         if self.original_columns == self.num_columns:
             if self.training:
                 if random.random() > 0.5:
-                    self.drop_local = True
-                    self.drop_global = False
+                    mode = 'drop_local'
+                    global_drop_column = -1
                 else:
-                    self.drop_local = False
-                    self.drop_global = True
-        
-        if self.num_columns == 1:
-            self.conv = ConvBlock(num_features,num_features,dropout_rate)
-        else:
-            self.conv = ConvBlock(num_features,num_features,dropout_rate)
-            self.block1 = FractalBlock(original_columns, num_columns-1, num_features, out_features, dropout_rate, self.drop_local, self.drop_global)
-            self.block2 = FractalBlock(original_columns, num_columns-1, num_features, out_features, dropout_rate, self.drop_local, self.drop_global)
-            self.transition = TransitionLayer(num_features,out_features)
-    
-    def forward(self,x):
+                    mode = 'drop_global'
+                    global_drop_column = random.randint(0, self.original_columns-1)
+
         if self.num_columns == 1:
             y = self.conv(x)
             return y
         else:
-            x = join(x, self.drop_local, self.drop_global, False)
+            x = join(x)
             y1 = self.conv(x)
             y2 = self.block1(x)
-            y2 = join(y2, self.drop_local, self.drop_global, False)
+            y2 = join(y2)
             y2 = self.block2(y2)
             
             if isinstance(y2, list):
                 res = [y1]+y2
             else:
                 res = [y1,y2]
-                
+            
             if self.original_columns == self.num_columns:
-                return self.transition(join(res, self.drop_local, self.drop_global, True))
+                return self.transition(join(res))
             else:
                 return res
 
-def join(inputs, drop_local, drop_global, join_all):
+def join(inputs):
     if not isinstance(inputs, list):
         return inputs
     
-    if drop_local:
+    if mode == 'drop_local':
         mask = np.random.rand(len(inputs)) > 0.15
         if not any(mask):
             mask[random.randint(0,len(inputs)-1)] = True
         inputs = [i for i,m in zip(inputs,mask) if m]
     
-    if drop_global and join_all:
-        glb_idx = random.randint(0,len(inputs)-1)
-        return inputs[glb_idx]
+    if mode == 'drop_global' and len(inputs)-1 >= global_drop_column:
+        return inputs[global_drop_column]
     
     total = 0
     for tensors in inputs:
@@ -95,11 +98,11 @@ class FractalNet(nn.Module):
         num_columns = int(math.log2(layer_num//5))+1
         
         self.conv = ConvBlock(3, 64, 0)
-        self.block1 = FractalBlock(num_columns, num_columns, 64, 128, dropout_per_block[0], False, False)
-        self.block2 = FractalBlock(num_columns, num_columns, 128, 256, dropout_per_block[1], False, False)
-        self.block3 = FractalBlock(num_columns, num_columns, 256, 512, dropout_per_block[2], False, False)
-        self.block4 = FractalBlock(num_columns, num_columns, 512, 512, dropout_per_block[3], False, False)
-        self.block5 = FractalBlock(num_columns, num_columns, 512, 512, dropout_per_block[4], False, False)
+        self.block1 = FractalBlock(num_columns, num_columns, 64, 128, dropout_per_block[0])
+        self.block2 = FractalBlock(num_columns, num_columns, 128, 256, dropout_per_block[1])
+        self.block3 = FractalBlock(num_columns, num_columns, 256, 512, dropout_per_block[2])
+        self.block4 = FractalBlock(num_columns, num_columns, 512, 512, dropout_per_block[3])
+        self.block5 = FractalBlock(num_columns, num_columns, 512, 512, dropout_per_block[4])
         self.fc = nn.Linear(512, num_classes)
     
     def forward(self,x):
